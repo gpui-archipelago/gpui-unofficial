@@ -183,7 +183,7 @@ fn patch_readme_for_publish(crate_dir: &Path, original_name: &str) {
     let notice = format!(
         "> **Note:** This is an unofficial release of Zed's \
          [{original_name}](https://github.com/zed-industries/zed/tree/main/crates/{original_name}) crate, \
-         published to crates.io by [gpui-unofficial](https://github.com/iamnbutler/gpui-unofficial). \
+         published to crates.io by [gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial). \
          It is not maintained by the Zed team. For issues with the crate itself, see the \
          [Zed repository](https://github.com/zed-industries/zed).\n\n"
     );

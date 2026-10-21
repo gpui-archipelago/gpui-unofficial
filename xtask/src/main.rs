@@ -68,7 +68,7 @@ enum Commands {
         #[arg(long)]
         tag: String,
         /// GitHub repo in owner/name format
-        #[arg(long, default_value = "iamnbutler/gpui-unofficial")]
+        #[arg(long, default_value = "gpui-archipelago/gpui-unofficial")]
         repo: String,
         /// Print per-crate publish status
         #[arg(long)]

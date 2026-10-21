@@ -303,7 +303,7 @@ fn transform_cargo_toml(
             // Set repository
             table.insert(
                 "repository",
-                toml_edit::value("https://github.com/iamnbutler/gpui-unofficial"),
+                toml_edit::value("https://github.com/gpui-archipelago/gpui-unofficial"),
             );
 
             // Remove publish = false if present

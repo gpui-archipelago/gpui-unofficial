@@ -69,7 +69,7 @@ pub trait ReleaseChecker {
     fn release_branch_exists(&self, repo_url: &str, version: &str) -> bool;
 
     /// Returns true if a GitHub release for `tag` exists in `repo`
-    /// (owner/name format, e.g. "iamnbutler/gpui-unofficial").
+    /// (owner/name format, e.g. "gpui-archipelago/gpui-unofficial").
     fn github_release_exists(&self, repo: &str, tag: &str) -> bool;
 
     /// Returns true if `name@version` is visible on the crates.io sparse index.
@@ -311,7 +311,7 @@ mod tests {
     // --- Helpers ------------------------------------------------------------
 
     fn run_report(checker: &dyn ReleaseChecker) -> VerifyReport {
-        build_report("v1.8.2", "iamnbutler/gpui-unofficial", None, false, checker)
+        build_report("v1.8.2", "gpui-archipelago/gpui-unofficial", None, false, checker)
     }
 
     // --- Tests --------------------------------------------------------------
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn version_stripped_of_v_prefix_for_crates() {
         let checker = FakeChecker::all_published();
-        let report = build_report("v1.8.2", "iamnbutler/gpui-unofficial", None, false, &checker);
+        let report = build_report("v1.8.2", "gpui-archipelago/gpui-unofficial", None, false, &checker);
         for c in &report.crates_published {
             assert_eq!(c.version, "1.8.2", "crate {} has wrong version string", c.name);
         }
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn bare_version_also_works() {
         let checker = FakeChecker::all_published();
-        let report = build_report("1.8.2", "iamnbutler/gpui-unofficial", None, false, &checker);
+        let report = build_report("1.8.2", "gpui-archipelago/gpui-unofficial", None, false, &checker);
         for c in &report.crates_published {
             assert_eq!(c.version, "1.8.2");
         }
@@ -391,7 +391,7 @@ mod tests {
         let overrides = vec![
             ("gpui-unofficial".to_string(), "1.7.2".to_string()),
         ];
-        let report = build_report("v1.8.2", "iamnbutler/gpui-unofficial", Some(&overrides), false, &checker);
+        let report = build_report("v1.8.2", "gpui-archipelago/gpui-unofficial", Some(&overrides), false, &checker);
 
         let gpui = report
             .crates_published
