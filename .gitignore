@@ -5,3 +5,5 @@ Cargo.lock
 .idea
 docs/plans
 crates/
+__pycache__/
+*.pyc

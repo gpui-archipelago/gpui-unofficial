@@ -66,6 +66,37 @@ Plus supporting crates: `collections-gpui-unofficial`, `scheduler-gpui-unofficia
 2. Transforms the crates (renaming packages, updating dependencies)
 3. Opens a PR, and on merge publishes to crates.io
 
+## Fixing CI failures locally
+
+The former `gh-aw` CI Fix agent was removed in
+[#341](https://github.com/gpui-archipelago/gpui-unofficial/pull/341). The same
+workflow now runs locally against the current checkout; it needs `gh` and
+`cargo`, not GitHub Actions or `ANTHROPIC_API_KEY`.
+
+```sh
+# Collect a failed run (or --issue 343 / --run <id>)
+scripts/ci-fix/collect.sh --latest
+
+# Reproduce with a shallow zed clone and one cargo check
+scripts/ci-fix/reproduce.sh --run <run-id>
+
+# Cheap verification, then a draft PR (dry run unless --push)
+scripts/ci-fix/verify.sh --run <run-id>
+scripts/ci-fix/submit.sh --run <run-id> --push
+```
+
+A bundled headless loop can drive the fix with DeepSeek instead of an
+interactive agent:
+
+```sh
+DEEPSEEK_API_KEY=... python3 scripts/ci-fix/deepseek_agent.py --run <run-id>
+```
+
+Typical cost is **$0.007-$0.03 per run** on `deepseek-flash`
+(`scripts/ci-fix/estimate-cost.sh --scenarios`). See
+[`.agents/skills/ci-fix-local/SKILL.md`](.agents/skills/ci-fix-local/SKILL.md)
+for the full playbook, constraints, and resource controls.
+
 ## License
 
 All gpui code is from [Zed](https://github.com/zed-industries/zed) and licensed under Apache-2.0.
