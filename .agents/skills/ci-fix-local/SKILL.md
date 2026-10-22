@@ -166,7 +166,9 @@ recently collected run.
    - permission/HTTP 403 -> workflow `permissions`;
    - crates.io 429 or propagation delay -> timing in `publish.rs`.
 3. Search before reading: `rg 'fn transform_crate' xtask/src`, then read the
-   function range.
+   function range. Before adding a new workaround, check
+   [`docs/upstream-patches.md`](../../../docs/upstream-patches.md): extend an
+   existing patch if it is the same shape, and record any new one.
 4. Reproduce with `--target`, edit minimally, re-run, then `verify.sh`.
 5. If it is an external outage, stop and report it; do not code around it.
 
@@ -203,6 +205,10 @@ for a wgpu release).
   PR already exists; use `--force` to override.
 - `submit.sh` is a dry run unless you pass `--push`; the PR is a draft unless
   you pass `--no-draft`.
+- Every new transform/publish/packaging workaround must be recorded in
+  [`docs/upstream-patches.md`](../../../docs/upstream-patches.md) and covered by
+  a fixture test. The ledger explains what we changed on top of Zed and when
+  each patch can be removed.
 
 ## Troubleshooting
 

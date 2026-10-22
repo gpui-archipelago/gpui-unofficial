@@ -1,5 +1,6 @@
 mod bump;
 mod publish;
+mod readme;
 mod test_isolated;
 mod transform;
 mod verify;

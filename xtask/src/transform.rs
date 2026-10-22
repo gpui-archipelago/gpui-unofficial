@@ -133,8 +133,10 @@ pub fn run(zed_tag: &str, zed_path: Option<&str>, output_dir: &str, use_local_de
         transformed.push(crate_path);
     }
 
-    // Write metadata file
-    write_metadata(&output_path, zed_tag, &zed_dir, &transformed)?;
+    // Write metadata and the custom per-crate READMEs.
+    let zed_commit = read_zed_commit(&zed_dir)?;
+    write_metadata(&output_path, zed_tag, &zed_commit, &transformed)?;
+    crate::readme::write_readmes(&output_path, zed_tag, &zed_commit, &transformed)?;
 
     println!("\nTransform complete! Crates written to: {output_dir}");
     println!("Run 'cargo build --workspace' to verify.");
@@ -1498,7 +1500,10 @@ fn add_custom_cfg_lints(doc: &mut DocumentMut, crate_name: &str) {
 
 /// Known git-only deps that have crates.io equivalents.
 /// Fallback when cargo search fails (e.g., rate limits, network issues).
-fn known_git_dep_version(package: &str) -> Option<String> {
+///
+/// Shared with `publish::known_fork_version` so the transform and publish
+/// fallbacks cannot disagree.
+pub(crate) fn known_git_dep_version(package: &str) -> Option<String> {
     match package {
         // zed pins wgpu to a git revision newer than crates.io 30.0.1. 30.0.1
         // provides most of the API, and `patch_gpui_wgpu_source` adapts the
@@ -1585,22 +1590,29 @@ fn zed_tag_to_version(tag: &str) -> String {
     tag.strip_prefix('v').unwrap_or(tag).to_string()
 }
 
-fn write_metadata(
-    output_dir: &Path,
-    zed_tag: &str,
-    zed_dir: &Path,
-    crates: &[&str],
-) -> Result<()> {
-    // Get commit SHA
+fn read_zed_commit(zed_dir: &Path) -> Result<String> {
     let output = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(zed_dir)
-        .output()?;
-    let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        .output()
+        .with_context(|| format!("Failed to read zed commit from {}", zed_dir.display()))?;
 
+    if !output.status.success() {
+        bail!("Failed to read zed commit from {}", zed_dir.display());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn write_metadata(
+    output_dir: &Path,
+    zed_tag: &str,
+    zed_commit: &str,
+    crates: &[&str],
+) -> Result<()> {
     let metadata = serde_json::json!({
         "zed_tag": zed_tag,
-        "zed_commit": sha,
+        "zed_commit": zed_commit,
         "transformed_at": chrono::Utc::now().to_rfc3339(),
         // The crates this tag actually produced, not the full publish order —
         // older tags legitimately lack some of it (see CRATE_INTRODUCED_IN).

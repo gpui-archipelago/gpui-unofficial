@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 use toml_edit::DocumentMut;
 
-use crate::transform::{lookup_crates_io_version, remove_dep_from_features, CRATE_PUBLISH_ORDER, crate_name_from_path, unofficial_name};
+use crate::transform::{known_git_dep_version, lookup_crates_io_version, remove_dep_from_features, CRATE_PUBLISH_ORDER, crate_name_from_path, unofficial_name};
 
 /// crates.io allows a burst of 5 new crates, then 1 per 10 minutes.
 /// For existing crates (version updates), the limit is more generous.
@@ -189,6 +189,11 @@ fn patch_readme_for_publish(crate_dir: &Path, original_name: &str) {
     );
 
     let content = fs::read_to_string(&readme_path).unwrap_or_default();
+    // New transforms generate the custom README directly; this function is a
+    // fallback for crates/ trees produced before the template existed.
+    if content.contains(crate::readme::GENERATED_MARKER) {
+        return;
+    }
     if content.contains("unofficial release") {
         return; // Already patched
     }
@@ -294,23 +299,24 @@ fn patch_dep_section_git(doc: &mut DocumentMut, section: &str, removed_optionals
 /// These are well-known forks that track the official crates.io releases.
 fn known_fork_version(package: &str) -> Option<String> {
     match package {
-        "wgpu" => Some("29".to_string()),
         "zed-font-kit" => Some("0.14".to_string()),
         "zed-scap" => Some("0.0.8".to_string()),
         "proptest" => Some("1".to_string()),
-        _ => None,
+        // Shared mappings (currently wgpu) live in transform.rs so the two
+        // fallbacks cannot drift.
+        _ => known_git_dep_version(package),
     }
 }
 
 /// Check if a crate exists at all on crates.io (any version)
 fn crate_exists_on_registry(name: &str) -> bool {
     let url = format!("https://crates.io/api/v1/crates/{name}");
-    
+
     for attempt in 0..3 {
         if attempt > 0 {
             thread::sleep(Duration::from_secs(5 * attempt as u64));
         }
-        
+
         match reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(10))
             .user_agent("gpui-unofficial-publish/0.1")
@@ -344,12 +350,12 @@ fn crate_exists_on_registry(name: &str) -> bool {
 /// Check if a specific crate version exists on crates.io using the crates.io API
 fn crate_version_exists(name: &str, version: &str) -> bool {
     let url = format!("https://crates.io/api/v1/crates/{name}/{version}");
-    
+
     for attempt in 0..3 {
         if attempt > 0 {
             thread::sleep(Duration::from_secs(2 * attempt as u64));
         }
-        
+
         match reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(10))
             .user_agent("gpui-unofficial-publish/0.1")
@@ -367,7 +373,7 @@ fn crate_version_exists(name: &str, version: &str) -> bool {
                 }
                 // Other status codes - retry
                 if attempt == 2 {
-                    eprintln!("Unexpected status {} for {}/{}, treating as not found", 
+                    eprintln!("Unexpected status {} for {}/{}, treating as not found",
                         response.status(), name, version);
                     return false;
                 }
@@ -600,4 +606,20 @@ pub fn run(crates_dir: &str, dry_run: bool) -> Result<()> {
     println!("\nPublish complete!");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `transform::known_git_dep_version` and `publish::known_fork_version`
+    /// both decide what to substitute for a git-only dependency. They must
+    /// agree; the publish fallback delegates shared mappings to the transform.
+    #[test]
+    fn shared_fork_versions_match_transform_mapping() {
+        assert_eq!(
+            known_fork_version("wgpu"),
+            crate::transform::known_git_dep_version("wgpu")
+        );
+    }
 }

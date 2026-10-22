@@ -97,6 +97,10 @@ Typical cost is **$0.007-$0.03 per run** on `deepseek-flash`
 [`.agents/skills/ci-fix-local/SKILL.md`](.agents/skills/ci-fix-local/SKILL.md)
 for the full playbook, constraints, and resource controls.
 
+Every transform, publish, or packaging workaround applied on top of Zed is
+recorded in [`docs/upstream-patches.md`](docs/upstream-patches.md), with the
+reason and the condition under which it can be removed.
+
 ## License
 
 All gpui code is from [Zed](https://github.com/zed-industries/zed) and licensed under Apache-2.0.
