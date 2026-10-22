@@ -231,6 +231,12 @@ fn transform_crate(
         patch_inspector_cfgs(&dest_dir)?;
     }
 
+    // Adapt gpui_wgpu to the crates.io wgpu release we substitute for zed's
+    // pinned git revision.
+    if crate_name == "gpui_wgpu" {
+        patch_gpui_wgpu_source(&dest_dir)?;
+    }
+
     // Patch gpui_macos to fix unnecessary unsafe block
     if crate_name == "gpui_macos" {
         patch_gpui_macos_source(&dest_dir)?;
@@ -615,8 +621,8 @@ fn transform_dependencies(
                             }
                             None => {
                                 // Git-only dep with no version field.
-                                // For non-optional [dependencies], try to find the official crates.io
-                                // version (e.g. the zed-industries/wgpu fork tracks wgpu 29.x on crates.io).
+                                // For non-optional [dependencies], map it to the
+                                // matching crates.io release when one exists.
                                 let resolved_via_lookup = if !is_optional && section == "dependencies" {
                                     let pkg = workspace_dep
                                         .as_table_like()
@@ -624,6 +630,31 @@ fn transform_dependencies(
                                         .and_then(|v| v.as_str())
                                         .unwrap_or(&dep_name)
                                         .to_string();
+
+                                    // The git-only workspace entry usually carries
+                                    // `default-features` but not the member's feature
+                                    // list. Preserve both so the substituted crate
+                                    // keeps the same feature set (important for
+                                    // target-specific wgpu backends).
+                                    let usage_table = dep.as_table_like();
+                                    let workspace_table = workspace_dep.as_table_like();
+                                    let default_features = usage_table
+                                        .and_then(|t| t.get("default-features"))
+                                        .or_else(|| workspace_table.and_then(|t| t.get("default-features")))
+                                        .and_then(|v| v.as_bool());
+                                    let mut features: Vec<String> = Vec::new();
+                                    for table in [workspace_table, usage_table].into_iter().flatten() {
+                                        if let Some(array) = table.get("features").and_then(|v| v.as_array()) {
+                                            for feature in array.iter() {
+                                                if let Some(feature) = feature.as_str() {
+                                                    if !features.iter().any(|seen| seen == feature) {
+                                                        features.push(feature.to_string());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Try known fallbacks first, then lookup
                                     let version = known_git_dep_version(&pkg)
                                         .or_else(|| lookup_crates_io_version(&pkg));
@@ -631,6 +662,19 @@ fn transform_dependencies(
                                         println!("  Resolved git-only dep '{dep_name}' to crates.io {pkg}@{ver}");
                                         let mut t = toml_edit::InlineTable::new();
                                         t.insert("version", ver.into());
+                                        if pkg != dep_name {
+                                            t.insert("package", pkg.as_str().into());
+                                        }
+                                        if let Some(default_features) = default_features {
+                                            t.insert("default-features", default_features.into());
+                                        }
+                                        if !features.is_empty() {
+                                            let mut array = toml_edit::Array::new();
+                                            for feature in &features {
+                                                array.push(feature.as_str());
+                                            }
+                                            t.insert("features", toml_edit::Value::Array(array));
+                                        }
                                         Item::Value(Value::InlineTable(t))
                                     })
                                 } else {
@@ -986,6 +1030,58 @@ fn patch_gpui_apple_build_rs(zed_dir: &Path, crate_dir: &Path) -> Result<()> {
                 package.insert("include", Item::Value(Value::Array(arr)));
                 fs::write(&cargo_toml_path, doc.to_string())?;
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Adapt `gpui_wgpu` to the crates.io `wgpu` release substituted for zed's
+/// pinned git revision.
+///
+/// zed v1.25.2 pins wgpu to a commit after crates.io 30.0.1. 30.0.1 already has
+/// `SurfaceColorSpace`, `SurfaceConfiguration::color_space`,
+/// `RequestAdapterOptions::apply_limit_buckets`, and `Queue::present`, but the
+/// pinned commit also uses three APIs that 30.0.1 does not:
+///
+/// - `DeviceDescriptor::default_queue` / `QueueDescriptor` (remove the field;
+///   30.0.1's `request_device` creates a default queue itself),
+/// - `TextureFormat::has_srgb_suffix` (30.0.1 names the same predicate
+///   `is_srgb`).
+fn patch_gpui_wgpu_source(crate_dir: &Path) -> Result<()> {
+    let src_dir = crate_dir.join("src");
+    if !src_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in WalkDir::new(&src_dir) {
+        let entry = entry?;
+        if !entry.file_type().is_file() || entry.path().extension().is_none_or(|e| e != "rs") {
+            continue;
+        }
+
+        let path = entry.path();
+        let content = fs::read_to_string(path)?;
+        let mut patched = content.replace(".has_srgb_suffix()", ".is_srgb()");
+
+        // Drop the standalone `default_queue` field from DeviceDescriptor
+        // literals. The previous field keeps its trailing comma, so the
+        // remaining struct literal stays valid.
+        patched = patched
+            .lines()
+            .filter(|line| {
+                !line
+                    .trim_start()
+                    .starts_with("default_queue: wgpu::QueueDescriptor::default()")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        if content.ends_with('\n') {
+            patched.push('\n');
+        }
+
+        if patched != content {
+            fs::write(path, patched)?;
         }
     }
 
@@ -1404,7 +1500,10 @@ fn add_custom_cfg_lints(doc: &mut DocumentMut, crate_name: &str) {
 /// Fallback when cargo search fails (e.g., rate limits, network issues).
 fn known_git_dep_version(package: &str) -> Option<String> {
     match package {
-        "wgpu" => Some("29.0.1".to_string()),
+        // zed pins wgpu to a git revision newer than crates.io 30.0.1. 30.0.1
+        // provides most of the API, and `patch_gpui_wgpu_source` adapts the
+        // three call sites that were added after the release.
+        "wgpu" => Some("30.0.1".to_string()),
         _ => None,
     }
 }
@@ -1413,13 +1512,13 @@ fn known_git_dep_version(package: &str) -> Option<String> {
 /// Returns the version string (e.g. "29.0.1") or None if not found.
 pub(crate) fn lookup_crates_io_version(package: &str) -> Option<String> {
     let url = format!("https://crates.io/api/v1/crates/{package}");
-    
+
     // Retry up to 3 times with backoff to handle transient failures
     for attempt in 0..3 {
         if attempt > 0 {
             std::thread::sleep(std::time::Duration::from_secs(2 * attempt as u64));
         }
-        
+
         match reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .user_agent("gpui-unofficial-transform/0.1")
@@ -2182,6 +2281,74 @@ chrono = { workspace = true, default-features = true }
         );
     }
 
+    /// Git-only deps are substituted with a crates.io version. That
+    /// substitution must preserve the usage's `default-features` and feature
+    /// list; zed's wgpu entry sets `default-features = false` and different
+    /// per-target backends (notably `webgl` for wasm).
+    #[test]
+    fn git_only_dep_substitution_preserves_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let zed_dir = dir.path().join("zed");
+        fs::create_dir_all(&zed_dir).unwrap();
+        fs::write(
+            zed_dir.join("Cargo.toml"),
+            r#"[workspace]
+members = []
+
+[workspace.dependencies]
+wgpu = { git = "https://github.com/gfx-rs/wgpu", rev = "3b3506ea", default-features = false }
+"#,
+        )
+        .unwrap();
+        let workspace_deps = parse_workspace_deps(&zed_dir).unwrap();
+
+        let crate_dir = dir.path().join("gpui_wgpu");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::write(
+            crate_dir.join("Cargo.toml"),
+            r#"[package]
+name = "gpui_wgpu"
+version = "0.1.0"
+edition = "2021"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+wgpu = { workspace = true, features = ["webgl"] }
+"#,
+        )
+        .unwrap();
+
+        transform_cargo_toml(
+            &crate_dir,
+            dir.path(),
+            "gpui_wgpu",
+            &workspace_deps,
+            "v1.25.2",
+            false,
+        )
+        .unwrap();
+
+        let out = fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
+        let doc: DocumentMut = out.parse().unwrap();
+        let dep = &doc["target"]["cfg(target_family = \"wasm\")"]["dependencies"]["wgpu"];
+        assert_eq!(
+            dep["version"].as_str(),
+            Some("30.0.1"),
+            "git-only wgpu must map to 30.0.1, got:\n{out}"
+        );
+        assert_eq!(
+            dep["default-features"].as_bool(),
+            Some(false),
+            "default-features = false must survive, got:\n{out}"
+        );
+        let features: Vec<&str> = dep["features"]
+            .as_array()
+            .unwrap_or_else(|| panic!("wgpu must keep its features array, got:\n{out}"))
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(features, vec!["webgl"], "usage features must survive, got:\n{out}");
+    }
+
     /// zed's root Cargo.toml declares `serde = { version = "1.0", features =
     /// ["rc"] }` with no `derive`, and `crates/http_client/Cargo.toml` never
     /// overrides that. Inside the full zed workspace this is harmless —
@@ -2408,5 +2575,46 @@ fn some_test_only_fn() {}
             out.contains("#[cfg(all(test, debug_assertions))]"),
             "expected test-gated cfg to be simplified to debug_assertions, got:\n{out}"
         );
+    }
+
+    #[test]
+    fn wgpu_git_dep_maps_to_crates_io_30_0_1() {
+        assert_eq!(known_git_dep_version("wgpu").as_deref(), Some("30.0.1"));
+    }
+
+    /// zed v1.25.2 uses three wgpu APIs added after crates.io 30.0.1. The
+    /// transform substitutes 30.0.1, so those call sites must be rewritten.
+    #[test]
+    fn patch_gpui_wgpu_source_adapts_post_30_0_1_apis() {
+        let dir = tempfile::tempdir().unwrap();
+        let src_dir = dir.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(
+            src_dir.join("wgpu_context.rs"),
+            r#"fn create(adapter: &wgpu::Adapter) {
+    adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("gpui_device"),
+        default_queue: wgpu::QueueDescriptor::default(),
+    });
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            src_dir.join("wgpu_renderer.rs"),
+            "let format = formats.find(|f| !f.has_srgb_suffix());\n",
+        )
+        .unwrap();
+
+        patch_gpui_wgpu_source(dir.path()).unwrap();
+
+        let context = fs::read_to_string(src_dir.join("wgpu_context.rs")).unwrap();
+        assert!(!context.contains("default_queue"), "default_queue must be removed:\n{context}");
+        assert!(!context.contains("QueueDescriptor"), "QueueDescriptor must be removed:\n{context}");
+        assert!(context.contains("label: Some(\"gpui_device\"),"));
+
+        let renderer = fs::read_to_string(src_dir.join("wgpu_renderer.rs")).unwrap();
+        assert!(renderer.contains(".is_srgb()"), "has_srgb_suffix must become is_srgb:\n{renderer}");
+        assert!(!renderer.contains("has_srgb_suffix"));
     }
 }
