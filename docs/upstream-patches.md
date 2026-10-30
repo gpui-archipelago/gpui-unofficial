@@ -4,7 +4,7 @@
 ledger of every place where the generated crates intentionally differ from that
 Zed tree, and why.
 
-_Last audited against zed `v1.25.2` (2026-10-22)._
+_Last audited against zed `v1.26.2` (2026-10-30)._
 
 If you add a transform, publish, or packaging workaround, add an entry here in
 the same change. A patch without an entry is a maintenance bug: the next person
@@ -42,7 +42,7 @@ Kinds used below:
 | MAN-2 | manifest | Alias internal dependencies to `*-gpui-unofficial` | Source keeps original crate names; published packages are renamed | `transform_dependencies` | `local_deps_use_path_and_version_for_internal_siblings` |
 | MAN-3 | manifest | Resolve workspace dependencies; strip git fields; union features; honor `default-features` override | crates.io rejects git; Cargo's `workspace = true` semantics are not a plain copy | `resolve_workspace_dep` | `workspace_dep_features_are_unioned_not_replaced`, `workspace_dep_default_features_override_is_honored` |
 | MAN-4 | manifest | Substitute or remove git-only dependencies; preserve features/default-features | crates.io rejects git-only deps; zed has several | `transform_dependencies` fallback, `known_git_dep_version`, `lookup_crates_io_version` | `git_only_dep_substitution_preserves_features` |
-| MAN-5 | manifest | Clean `[features]` entries that referenced removed optional deps | Dangling `dep:`/`dep?/` references make the manifest unparsable | `remove_dep_from_features` | `removes_dep_prefixed_feature_entries`, `matches_every_activation_form_without_overreaching` |
+| MAN-5 | manifest | Clean `[features]` entries that referenced any removed dep | Dangling `dep:`, `dep?/` and `dep/feature` references make the manifest unparsable | `remove_dep_from_features` | `removes_dep_prefixed_feature_entries`, `matches_every_activation_form_without_overreaching`, `removed_non_optional_deps_are_stripped_from_features` |
 | MAN-6 | manifest | Remove the `inspector` feature and its deps/forwarding | Unpublished deps and a `gpui_macros` ↔ `gpui` packaging cycle | `remove_inspector_feature` | `remove_inspector_feature_strips_dev_dependency_too`, `inspector_feature_forwarding_removed_from_gpui_platform`, `inspector_dev_dependency_fully_removed_through_full_transform` |
 | MAN-7 | manifest | Add `serde/derive` when source derives `Serialize`/`Deserialize` | Standalone crates lose workspace feature unification | `ensure_serde_derive_feature` | `serde_derive_feature_is_added_when_source_uses_it` |
 | MAN-8 | manifest | Re-add crates.io `proptest` in the upstream target table and declare its feature | `proptest` is a git-only pin; gpui/sum_tree tests need it; wasm must not get it | `add_proptest_dependency` | four tests listed below |
@@ -253,12 +253,22 @@ duplicate is `publish::known_fork_version`. They must stay in sync.
 
 ### MAN-5 — feature cleanup
 
-When a dependency is removed, delete every `[features]` entry that activates it,
-in all Cargo forms: `dep`, `dep:`, `dep/feature`, and `dep?/feature`.
+When a dependency is removed — optional or not — delete every `[features]` entry
+that activates it, in all Cargo forms: `dep`, `dep:`, `dep/feature`, and
+`dep?/feature`.
 
 **Why.** A dangling `dep:foo` makes Cargo reject the manifest:
-"feature `x` includes `dep:foo`, but `foo` is not listed as a dependency".
+"feature `x` includes `dep:foo`, but `foo` is not listed as a dependency". A
+plain `foo/feature` forwarding is just as fatal. This is the shape zed 1.26's
+`gpui_ios` had before it joined the publish set: `gpui_platform` forwarded
+`runtime_shaders` to it while the transform was still dropping the path-only
+workspace dep. Dropping the dep without its forwarding fails every build with
+"feature `runtime_shaders` includes `gpui_ios/runtime_shaders`, but `gpui_ios`
+is not a dependency". `gpui_ios` is now in `CRATE_PUBLISH_ORDER`, so the 1.26
+forwarding is kept; the cleanup remains for the next unpublished backend and
+for any dep dropped as git-only.
 
+**Remove when.** Never; this is invariant maintenance.
 ### MAN-6 — inspector feature removal
 
 Remove the `inspector` feature from `gpui`, `gpui_macros`, and `gpui_platform`,

@@ -125,7 +125,7 @@ fn canonicalize_no_verbatim(path: &Path) -> std::io::Result<PathBuf> {
 
 fn is_supported_on_current_host(raw_name: &str) -> bool {
     match raw_name {
-        "gpui_apple" | "gpui_macos" => cfg!(target_os = "macos"),
+        "gpui_apple" | "gpui_macos" | "gpui_ios" => cfg!(target_os = "macos"),
         "gpui_linux" => cfg!(target_os = "linux"),
         "gpui_windows" => cfg!(target_os = "windows"),
         "gpui_web" => false, // web target requires wasm32-unknown-unknown

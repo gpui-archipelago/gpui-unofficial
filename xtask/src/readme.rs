@@ -185,7 +185,7 @@ fn kind_note_for(original_name: &str, pkg_name: &str, version: &str) -> String {
             "This is the platform facade (`application()`, backend selection). `gpui-unofficial` already depends on it; add it directly only to use the entry point."
         }
         "gpui_wgpu" => "The wgpu renderer backend, enabled transitively by the platform crates.",
-        "gpui_apple" | "gpui_macos" | "gpui_linux" | "gpui_windows" | "gpui_web" => {
+        "gpui_apple" | "gpui_macos" | "gpui_ios" | "gpui_linux" | "gpui_windows" | "gpui_web" => {
             "A platform backend, selected through `gpui_platform`."
         }
         "gpui_macros" => {

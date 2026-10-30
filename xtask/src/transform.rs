@@ -35,6 +35,7 @@ pub const CRATE_PUBLISH_ORDER: &[&str] = &[
     // Tier 4 - Platform backends
     "gpui_wgpu",
     "gpui_apple",
+    "gpui_ios",
     "gpui_macos",
     "gpui_linux",
     "gpui_windows",
@@ -58,6 +59,8 @@ pub const CRATE_PUBLISH_ORDER: &[&str] = &[
 const CRATE_INTRODUCED_IN: &[(&str, (u32, u32))] = &[
     // zed 1.17 moved metal_renderer.rs out of gpui_macos into gpui_apple.
     ("gpui_apple", (1, 17)),
+    // zed 1.26 added the iOS backend and wired it into gpui_platform.
+    ("gpui_ios", (1, 26)),
 ];
 
 /// Pull `(major, minor)` out of a zed tag such as `v1.16.1` or `v1.17.0-pre`.
@@ -382,11 +385,12 @@ fn transform_cargo_toml(
         remove_inspector_feature(&mut doc);
     }
 
-    // Transform dependencies, collecting any optional deps that get removed (git-only, no crates.io equiv)
-    let mut removed_optionals: Vec<String> = Vec::new();
-    transform_dependencies(&mut doc, "dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_optionals)?;
-    transform_dependencies(&mut doc, "dev-dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_optionals)?;
-    transform_dependencies(&mut doc, "build-dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_optionals)?;
+    // Transform dependencies, collecting any deps that get removed (git-only or
+    // not part of the publish set) so their [features] entries can be cleaned.
+    let mut removed_deps: Vec<String> = Vec::new();
+    transform_dependencies(&mut doc, "dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_deps)?;
+    transform_dependencies(&mut doc, "dev-dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_deps)?;
+    transform_dependencies(&mut doc, "build-dependencies", workspace_deps, &version, output_dir, use_local_deps, &mut removed_deps)?;
 
     // Handle target-specific dependencies
     if let Some(target) = doc.get_mut("target") {
@@ -402,7 +406,7 @@ fn transform_cargo_toml(
                                 let mut temp_doc = DocumentMut::new();
                                 if let Some(deps) = table.get(dep_section).cloned() {
                                     temp_doc.insert(dep_section, deps);
-                                    transform_dependencies(&mut temp_doc, dep_section, workspace_deps, &version, output_dir, use_local_deps, &mut removed_optionals)?;
+                                    transform_dependencies(&mut temp_doc, dep_section, workspace_deps, &version, output_dir, use_local_deps, &mut removed_deps)?;
                                     if let Some(new_deps) = temp_doc.get(dep_section).cloned() {
                                         table.insert(dep_section, new_deps);
                                     }
@@ -415,8 +419,8 @@ fn transform_cargo_toml(
         }
     }
 
-    // Clean up [features] entries that referenced removed optional deps
-    for dep_name in &removed_optionals {
+    // Clean up [features] entries that referenced removed deps
+    for dep_name in &removed_deps {
         remove_dep_from_features(&mut doc, dep_name);
     }
 
@@ -541,7 +545,7 @@ fn transform_dependencies(
     version: &str,
     _output_dir: &Path,
     use_local_deps: bool,
-    removed_optionals: &mut Vec<String>,
+    removed_deps: &mut Vec<String>,
 ) -> Result<()> {
     let Some(deps) = doc.get_mut(section) else {
         return Ok(());
@@ -685,9 +689,7 @@ fn transform_dependencies(
                                 if let Some(resolved) = resolved_via_lookup {
                                     deps_table.insert(&dep_name, resolved);
                                 } else {
-                                    if is_optional {
-                                        removed_optionals.push(dep_name.clone());
-                                    }
+                                    removed_deps.push(dep_name.clone());
                                     deps_to_remove.push(dep_name.clone());
                                 }
                             }
@@ -1649,6 +1651,15 @@ mod tests {
         }
     }
 
+    /// zed 1.26 added the iOS backend. The transform must not expect it on
+    /// 1.25 and earlier, or every older sync fails with "Crate not found".
+    #[test]
+    fn gpui_ios_is_only_expected_from_zed_1_26() {
+        assert!(!crate_exists_at_tag("gpui_ios", "v1.25.2"));
+        assert!(crate_exists_at_tag("gpui_ios", "v1.26.0"));
+        assert!(crate_exists_at_tag("gpui_ios", "v1.26.2"));
+    }
+
     /// Only crates listed in `CRATE_INTRODUCED_IN` may be skipped. Everything
     /// else must still fail loudly when it goes missing, so an upstream rename
     /// can't silently shrink the set of crates we publish.
@@ -2290,6 +2301,83 @@ chrono = { workspace = true, default-features = true }
             doc["dependencies"]["chrono"]["default-features"].as_bool(),
             Some(true),
             "crate-level `default-features = true` override must survive, got:\n{out}"
+        );
+    }
+
+    /// A target-specific workspace dependency that is not in the publish set is
+    /// dropped; its feature forwarding must be dropped with it. This is the
+    /// shape zed 1.26's `gpui_ios` had before it joined the publish set: a
+    /// path-only workspace dep with `runtime_shaders` forwarding to it. A
+    /// dangling `foo/feature` makes Cargo refuse the manifest with "feature
+    /// `runtime_shaders` includes `foo/runtime_shaders`, but `foo` is not a
+    /// dependency".
+    #[test]
+    fn removed_non_optional_deps_are_stripped_from_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let zed_dir = dir.path().join("zed");
+        fs::create_dir_all(&zed_dir).unwrap();
+        fs::write(
+            zed_dir.join("Cargo.toml"),
+            r#"[workspace]
+members = []
+
+[workspace.dependencies]
+gpui_macos = { path = "crates/gpui_macos" }
+gpui_future = { path = "crates/gpui_future" }
+"#,
+        )
+        .unwrap();
+        let workspace_deps = parse_workspace_deps(&zed_dir).unwrap();
+
+        let crate_dir = dir.path().join("gpui_platform");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::write(
+            crate_dir.join("Cargo.toml"),
+            r#"[package]
+name = "gpui_platform"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+runtime_shaders = ["gpui_macos/runtime_shaders", "gpui_future/runtime_shaders"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { workspace = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui_future = { workspace = true }
+"#,
+        )
+        .unwrap();
+
+        transform_cargo_toml(
+            &crate_dir,
+            dir.path(),
+            "gpui_platform",
+            &workspace_deps,
+            "v1.26.2",
+            false,
+        )
+        .unwrap();
+
+        let out = fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
+        let doc: DocumentMut = out.parse().unwrap();
+        let runtime_shaders = doc["features"]["runtime_shaders"].as_array().unwrap();
+        assert_eq!(
+            runtime_shaders.len(),
+            1,
+            "the dropped forwarding must not remain, got:\n{out}"
+        );
+        assert_eq!(
+            runtime_shaders.get(0).and_then(|v| v.as_str()),
+            Some("gpui_macos/runtime_shaders"),
+            "the macOS forwarding must survive, got:\n{out}"
+        );
+        assert!(
+            doc["target"][r#"cfg(target_os = "ios")"#]["dependencies"]
+                .get("gpui_future")
+                .is_none(),
+            "the unpublished dependency must be removed, got:\n{out}"
         );
     }
 

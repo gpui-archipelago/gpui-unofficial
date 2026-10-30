@@ -5,6 +5,7 @@
 
 [![gpui-wgpu-gpui-unofficial](https://img.shields.io/crates/v/gpui-wgpu-gpui-unofficial.svg?label=gpui-wgpu-gpui-unofficial)](https://crates.io/crates/gpui-wgpu-gpui-unofficial)
 [![gpui-macos-gpui-unofficial](https://img.shields.io/crates/v/gpui-macos-gpui-unofficial.svg?label=gpui-macos-gpui-unofficial)](https://crates.io/crates/gpui-macos-gpui-unofficial)
+[![gpui-ios-gpui-unofficial](https://img.shields.io/crates/v/gpui-ios-gpui-unofficial.svg?label=gpui-ios-gpui-unofficial)](https://crates.io/crates/gpui-ios-gpui-unofficial)
 [![gpui-linux-gpui-unofficial](https://img.shields.io/crates/v/gpui-linux-gpui-unofficial.svg?label=gpui-linux-gpui-unofficial)](https://crates.io/crates/gpui-linux-gpui-unofficial)
 [![gpui-windows-gpui-unofficial](https://img.shields.io/crates/v/gpui-windows-gpui-unofficial.svg?label=gpui-windows-gpui-unofficial)](https://crates.io/crates/gpui-windows-gpui-unofficial)
 [![gpui-web-gpui-unofficial](https://img.shields.io/crates/v/gpui-web-gpui-unofficial.svg?label=gpui-web-gpui-unofficial)](https://crates.io/crates/gpui-web-gpui-unofficial)
@@ -54,11 +55,18 @@ a known limitation.
 | `gpui-macros-gpui-unofficial` | Derive macros |
 | `gpui-platform-gpui-unofficial` | Platform abstraction |
 | `gpui-macos-gpui-unofficial` | macOS backend |
+| `gpui-ios-gpui-unofficial` | iOS backend |
 | `gpui-linux-gpui-unofficial` | Linux backend |
 | `gpui-windows-gpui-unofficial` | Windows backend |
 | `gpui-web-gpui-unofficial` | Web/WASM backend |
 
 Plus supporting crates: `collections-gpui-unofficial`, `scheduler-gpui-unofficial`, `refineable-gpui-unofficial`, etc.
+
+zed 1.26 introduced the iOS backend (`gpui_ios`), published as
+`gpui-ios-gpui-unofficial` and selected through `gpui_platform`. The crate
+compiles to the iOS implementation only when targeting iOS; elsewhere it is a
+small platform-neutral library, which is what lets the platform facade forward
+`runtime_shaders` to it without pulling UIKit into a macOS or Linux build.
 
 ## How It Works
 

@@ -83,7 +83,7 @@ raw_crate_name() {
 host_supported() {
   local raw="$1"
   case "$raw" in
-    gpui_apple|gpui_macos) [ "$(uname -s)" = "Darwin" ] ;;
+    gpui_apple|gpui_macos|gpui_ios) [ "$(uname -s)" = "Darwin" ] ;;
     gpui_linux) [ "$(uname -s)" = "Linux" ] ;;
     gpui_windows) case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac ;;
     gpui_web) return 1 ;;
