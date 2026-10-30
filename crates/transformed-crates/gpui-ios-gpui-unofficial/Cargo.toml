@@ -1,0 +1,83 @@
+[package]
+name = "gpui-ios-gpui-unofficial"
+version = "1.26.2"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+description = "Unofficial release of Zed's gpui_ios crate"
+
+[lib]
+path = "src/gpui_ios.rs"
+crate-type = ["staticlib", "rlib"]
+doctest = false
+
+[[example]]
+name = "ios"
+path = "examples/ios.rs"
+test = false
+bench = false
+
+[[test]]
+name = "text_input"
+path = "tests/text_input.rs"
+harness = false
+
+[features]
+runtime_shaders = ["gpui_apple/runtime_shaders"]
+
+[dependencies]
+gpui = { package = "gpui-unofficial", version = "1.26.2" }
+
+[target.'cfg(target_os = "ios")'.dev-dependencies]
+gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.26.2" }
+objc2-ui-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-quartz-core", "objc2-core-foundation", "NSText", "UIApplication", "UICommand", "UICornerConfiguration", "UICornerRadius", "UIEvent", "UIGeometry", "UIGestureRecognizer", "UIPanGestureRecognizer", "UIScreenEdgePanGestureRecognizer", "UIInterface", "UIOpenURLContext", "UIPasteboard", "UIResponder", "UIScene", "UISceneConfiguration", "UISceneDefinitions", "UISceneOptions", "UISceneSession", "UIScreen", "UITextInput", "UITextInputTraits", "UITouch", "UITraitCollection", "UIView", "UIViewController", "UIWindow", "UIWindowScene", "UIConversationContext"] }
+slotmap = { version = "1.0.6" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+anyhow = { version = "1.0.86" }
+block2 = { version = "0.6" }
+futures = { version = "0.3.34" }
+gpui_apple = { package = "gpui-apple-gpui-unofficial", version = "1.26.2", features = ["font-kit"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+objc2 = { version = "0.6" }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSArray", "NSAttributedString", "NSCoder", "NSData", "NSDate", "NSDictionary", "NSEnumerator", "NSError", "NSGeometry", "NSNull", "NSObjCRuntime", "NSObject", "NSProcessInfo", "NSRange", "NSRunLoop", "NSSet", "NSString", "NSURL", "NSValue", "objc2-core-foundation", "std", "NSThread", "NSOperation", "NSUserActivity", "block2"] }
+objc2-ui-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-quartz-core",
+    "objc2-core-foundation",
+    "NSText",
+    "UIApplication",
+    "UICommand",
+    "UICornerConfiguration",
+    "UICornerRadius",
+    "UIEvent",
+    "UIGeometry",
+    "UIGestureRecognizer",
+    "UIPanGestureRecognizer",
+    "UIScreenEdgePanGestureRecognizer",
+    "UIInterface",
+    "UIOpenURLContext",
+    "UIPasteboard",
+    "UIResponder",
+    "UIScene",
+    "UISceneConfiguration",
+    "UISceneDefinitions",
+    "UISceneOptions",
+    "UISceneSession",
+    "UIScreen",
+    "UITextInput",
+    "UITextInputTraits",
+    "UITouch",
+    "UITraitCollection",
+    "UIView",
+    "UIViewController",
+    "UIWindow",
+    "UIWindowScene"] }
+objc2-quartz-core = { version = "=0.3.2", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "CADisplayLink"] }
+objc2-core-foundation = { version = "=0.3.2", default-features = true }
+parking_lot = { version = "0.12.1" }
+raw-window-handle = { version = "0.6" }
+uuid = { version = "1.1", features = ["serde", "v5"] }
+
+[workspace]
