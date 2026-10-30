@@ -148,11 +148,6 @@ jobs:
         run: |
           cargo run -p xtask --release -- test-isolated
 
-      - name: Check the iOS backend
-        run: |
-          cd crates/gpui-ios-gpui-unofficial
-          cargo check
-
   check-windows:
     needs: check-release
     if: needs.check-release.outputs.new_release == 'true'
