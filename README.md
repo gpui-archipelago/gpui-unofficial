@@ -37,11 +37,11 @@ Fully automated standalones release of [gpui](https://github.com/zed-industries/
 ```toml
 [dependencies]
 gpui-unofficial = "1.27"   # pick the version matching the Zed release you want
+gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.27.0" }
 ```
 
 Versions mirror Zed's release tags: Zed `v1.27.0` publishes as `gpui-unofficial`
-version `1.27.0`. The platform backends are pulled in by `gpui-unofficial`, so
-this single dependency is all you need to get started.
+version `1.27.0`. 
 
 Because the version is taken verbatim from Zed's semver, there is currently no
 way to publish a fix for an already-released version without a version suffix —
