@@ -36,11 +36,11 @@ Fully automated standalones release of [gpui](https://github.com/zed-industries/
 
 ```toml
 [dependencies]
-gpui-unofficial = "1.7"   # pick the version matching the Zed release you want
+gpui-unofficial = "1.27"   # pick the version matching the Zed release you want
 ```
 
-Versions mirror Zed's release tags: Zed `v1.7.2` publishes as `gpui-unofficial`
-version `1.7.2`. The platform backends are pulled in by `gpui-unofficial`, so
+Versions mirror Zed's release tags: Zed `v1.27.0` publishes as `gpui-unofficial`
+version `1.27.0`. The platform backends are pulled in by `gpui-unofficial`, so
 this single dependency is all you need to get started.
 
 Because the version is taken verbatim from Zed's semver, there is currently no
