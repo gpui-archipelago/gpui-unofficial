@@ -1,0 +1,30 @@
+[package]
+name = "http-client-gpui-unofficial"
+version = "1.28.1"
+edition = "2024"
+license = "Apache-2.0"
+description = "A HTTP client library for Zed and GPUI"
+repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+
+[features]
+test-support = ["dep:log"]
+
+[lib]
+path = "src/http_client.rs"
+test = false
+doctest = false
+
+[dependencies]
+anyhow = { version = "1.0.86" }
+bytes = { version = "1.0" }
+futures = { version = "0.3.34" }
+http-body = { version = "1.0" }
+http = { version = "1.1" }
+log = { version = "0.4", default-features = false, features = ["std"], optional = true }
+parking_lot = { version = "0.12.1" }
+serde = { version = "1.0", features = ["rc"] }
+serde_json = { version = "1.0.144", features = ["preserve_order", "raw_value"] }
+serde_urlencoded = { version = "0.7" }
+url = { version = "2.2" }
+
+[workspace]
